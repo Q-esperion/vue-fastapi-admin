@@ -26,10 +26,10 @@ class Settings(BaseSettings):
     TORTOISE_ORM: dict = {
         "connections": {
             # SQLite configuration
-            "sqlite": {
-                "engine": "tortoise.backends.sqlite",
-                "credentials": {"file_path": f"{BASE_DIR}/db.sqlite3"},  # Path to SQLite database file
-            },
+            # "sqlite": {
+            #     "engine": "tortoise.backends.sqlite",
+            #     "credentials": {"file_path": f"{BASE_DIR}/db.sqlite3"},  # Path to SQLite database file
+            # },
             # MySQL/MariaDB configuration
             # Install with: tortoise-orm[asyncmy]
             # "mysql": {
@@ -44,16 +44,16 @@ class Settings(BaseSettings):
             # },
             # PostgreSQL configuration
             # Install with: tortoise-orm[asyncpg]
-            # "postgres": {
-            #     "engine": "tortoise.backends.asyncpg",
-            #     "credentials": {
-            #         "host": "localhost",  # Database host address
-            #         "port": 5432,  # Database port
-            #         "user": "yourusername",  # Database username
-            #         "password": "yourpassword",  # Database password
-            #         "database": "yourdatabase",  # Database name
-            #     },
-            # },
+            "postgres": {
+                "engine": "tortoise.backends.asyncpg",
+                "credentials": {
+                    "host": "localhost",  # Database host address
+                    "port": 5432,  # Database port
+                    "user": "admin",  # Database username
+                    "password": "123456",  # Database password
+                    "database": "school_db_test",  # Database name
+                },
+            },
             # MSSQL/Oracle configuration
             # Install with: tortoise-orm[asyncodbc]
             # "oracle": {
@@ -82,7 +82,7 @@ class Settings(BaseSettings):
         "apps": {
             "models": {
                 "models": ["app.models", "aerich.models"],
-                "default_connection": "sqlite",
+                "default_connection": "postgres",
             },
         },
         "use_tz": False,  # Whether to use timezone-aware datetimes

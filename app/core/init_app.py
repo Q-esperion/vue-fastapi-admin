@@ -27,6 +27,7 @@ from app.schemas.menus import MenuType
 from app.settings.config import settings
 
 from .middlewares import BackGroundTaskMiddleware, HttpAuditLogMiddleware
+from .middlewares import TenantMiddleware
 
 
 def make_middlewares():
@@ -48,6 +49,7 @@ def make_middlewares():
                 "/openapi.json",
             ],
         ),
+        Middleware(TenantMiddleware),
     ]
     return middleware
 

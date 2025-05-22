@@ -3,15 +3,16 @@ import re
 from datetime import datetime
 from typing import Any, AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import Response
 from fastapi.routing import APIRoute
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.types import ASGIApp, Receive, Scope, Send
+from tortoise import Tortoise
 
 from app.core.dependency import AuthControl
-from app.models.admin import AuditLog, User
+from app.models.admin import AuditLog, User, Tenant
 
 from .bgtask import BgTasks
 
@@ -173,3 +174,51 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
         process_time = int((end_time.timestamp() - start_time.timestamp()) * 1000)
         await self.after_request(request, response, process_time)
         return response
+
+
+class TenantMiddleware:
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive=receive)
+        
+        # 尝试从请求头中获取租户的 schema_name
+        tenant_schema_name = request.headers.get("X-Tenant-Schema-Name")
+        
+        current_connection = Tortoise.get_connection("default")
+        default_search_path = "public"
+
+        if tenant_schema_name:
+            try:
+                # 验证租户是否存在于 public.tenant 表中
+                # 注意：这里假设 Tenant 模型查询时会自动使用 public schema
+                tenant = await Tenant.get_or_none(schema_name=tenant_schema_name, is_active=True)
+                if tenant:
+                    # 设置 search_path 为租户的 schema 和 public
+                    # public 需要包含在内，以便访问 public.tenant 等共享表
+                    await current_connection.execute_script(f'SET search_path TO "{tenant_schema_name}", public')
+                else:
+                    # 如果租户不存在或未激活，则仅使用 public schema
+                    await current_connection.execute_script(f'SET search_path TO {default_search_path}')
+                    # 可以选择抛出异常或记录警告
+                    # raise HTTPException(status_code=404, detail="Tenant not found or not active")
+            except Exception as e:
+                # 发生错误时，恢复到默认 search_path
+                await current_connection.execute_script(f'SET search_path TO {default_search_path}')
+                # 可以记录错误信息
+                # logger.error(f"Error setting tenant schema: {e}")
+                # raise HTTPException(status_code=500, detail="Error processing tenant information")
+        else:
+            # 如果没有提供租户信息，则默认使用 public schema
+            await current_connection.execute_script(f'SET search_path TO {default_search_path}')
+
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            # 请求结束后，恢复 search_path 到默认值，以避免影响后续非租户请求或不同租户请求
+            await current_connection.execute_script(f'SET search_path TO {default_search_path}')

@@ -69,6 +69,7 @@ dependencies = [
     "websockets==14.1",
     "pyproject-toml>=0.1.0",
     "uvloop==0.21.0 ; sys_platform != 'win32'",
+    "tortoise-orm[asyncpg]==0.23.0",
 ]
 
 [tool.black]
@@ -87,3 +88,6 @@ lint.ignore = [
 tortoise_orm = "app.settings.TORTOISE_ORM"
 location = "./migrations"
 src_folder = "./."
+
+[[tool.uv.index]]
+url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"

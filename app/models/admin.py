@@ -20,6 +20,7 @@ class User(BaseModel, TimestampMixin):
 
     class Meta:
         table = "user"
+        schema = "public"
 
 
 class Role(BaseModel, TimestampMixin):
@@ -87,3 +88,18 @@ class AuditLog(BaseModel, TimestampMixin):
     response_time = fields.IntField(default=0, description="响应时间(单位ms)", index=True)
     request_args = fields.JSONField(null=True, description="请求参数")
     response_body = fields.JSONField(null=True, description="返回数据")
+
+
+class Tenant(BaseModel, TimestampMixin):
+    name = fields.CharField(max_length=100, description="租户名称", index=True)
+    schema_name = fields.CharField(max_length=100, unique=True, description="Schema名称", index=True)
+    is_active = fields.BooleanField(default=True, description="是否激活", index=True)
+    owner = fields.ForeignKeyField('models.User', related_name='owned_tenants', description="租户负责人", null=True)
+    description = fields.CharField(max_length=500, null=True, description="租户描述")
+    contact_email = fields.CharField(max_length=255, null=True, description="联系邮箱")
+    contact_phone = fields.CharField(max_length=20, null=True, description="联系电话")
+
+    class Meta:
+        table = "tenant"
+        table_description = "Stores tenant metadata in the public schema"
+        schema = "public"
