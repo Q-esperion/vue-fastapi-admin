@@ -2,6 +2,10 @@ import json
 import re
 from datetime import datetime
 from typing import Any, AsyncGenerator
+from functools import lru_cache
+import logging
+from time import time
+from contextvars import ContextVar
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import Response
@@ -12,9 +16,14 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from tortoise import Tortoise
 
 from app.core.dependency import AuthControl
-from app.models.admin import AuditLog, User, Tenant
+from app.models.admin import AuditLog, User
+from app.models.tenant import Tenant
 
 from .bgtask import BgTasks
+
+logger = logging.getLogger(__name__)
+
+tenant_context = ContextVar('tenant_context', default=None)
 
 
 class SimpleBaseMiddleware:
@@ -179,46 +188,78 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
 class TenantMiddleware:
     def __init__(self, app: ASGIApp):
         self.app = app
+        self._tenant_cache = {}
+        # 定义公共API路径前缀
+        self.public_paths = [
+            "/api/public/",
+            "/api/auth/",
+            "/api/system/"
+        ]
+
+    @lru_cache(maxsize=100)
+    async def get_tenant(self, schema_name: str):
+        return await Tenant.get_or_none(schema_name=schema_name, is_active=True)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        start_time = time()
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
         request = Request(scope, receive=receive)
-        
-        # 尝试从请求头中获取租户的 schema_name
-        tenant_schema_name = request.headers.get("X-Tenant-Schema-Name")
-        
         current_connection = Tortoise.get_connection("default")
         default_search_path = "public"
-
-        if tenant_schema_name:
-            try:
-                # 验证租户是否存在于 public.tenant 表中
-                # 注意：这里假设 Tenant 模型查询时会自动使用 public schema
-                tenant = await Tenant.get_or_none(schema_name=tenant_schema_name, is_active=True)
-                if tenant:
-                    # 设置 search_path 为租户的 schema 和 public
-                    # public 需要包含在内，以便访问 public.tenant 等共享表
-                    await current_connection.execute_script(f'SET search_path TO "{tenant_schema_name}", public')
-                else:
-                    # 如果租户不存在或未激活，则仅使用 public schema
-                    await current_connection.execute_script(f'SET search_path TO {default_search_path}')
-                    # 可以选择抛出异常或记录警告
-                    # raise HTTPException(status_code=404, detail="Tenant not found or not active")
-            except Exception as e:
-                # 发生错误时，恢复到默认 search_path
-                await current_connection.execute_script(f'SET search_path TO {default_search_path}')
-                # 可以记录错误信息
-                # logger.error(f"Error setting tenant schema: {e}")
-                # raise HTTPException(status_code=500, detail="Error processing tenant information")
-        else:
-            # 如果没有提供租户信息，则默认使用 public schema
-            await current_connection.execute_script(f'SET search_path TO {default_search_path}')
-
+        
         try:
+            # 判断是否为公共API
+            path = request.url.path
+            is_public_api = any(path.startswith(prefix) for prefix in self.public_paths)
+            
+            if is_public_api:
+                await current_connection.execute_script(f'SET search_path TO public')
+                await self.app(scope, receive, send)
+                return
+
+            # 从Authorization头中获取token
+            auth_header = request.headers.get("Authorization")
+            tenant_schema_name = None
+            
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+                try:
+                    user_obj = await AuthControl.is_authed(token)
+                    if user_obj and user_obj.tenant_id:
+                        tenant = await Tenant.get_or_none(id=user_obj.tenant_id)
+                        if tenant:
+                            tenant_schema_name = tenant.schema_name
+                            tenant_context.set(tenant)
+                except Exception as e:
+                    logger.error(f"Error getting tenant from token: {e}")
+
+            if tenant_schema_name:
+                try:
+                    tenant = await self.get_tenant(tenant_schema_name)
+                    if tenant:
+                        logger.info(f"Switching to tenant schema: {tenant_schema_name}")
+                        await current_connection.execute_script(f'SET search_path TO "{tenant_schema_name}", public')
+                    else:
+                        logger.warning(f"Tenant not found or not active: {tenant_schema_name}")
+                        await current_connection.execute_script(f'SET search_path TO {default_search_path}')
+                except Exception as e:
+                    logger.error(f"Error setting tenant schema: {e}")
+                    await current_connection.execute_script(f'SET search_path TO {default_search_path}')
+            else:
+                # 如果没有提供租户信息，则默认使用 public schema
+                await current_connection.execute_script(f'SET search_path TO {default_search_path}')
+
             await self.app(scope, receive, send)
         finally:
-            # 请求结束后，恢复 search_path 到默认值，以避免影响后续非租户请求或不同租户请求
-            await current_connection.execute_script(f'SET search_path TO {default_search_path}')
+            end_time = time()
+            process_time = (end_time - start_time) * 1000
+            if process_time > 1000:  # 超过1秒记录警告
+                logger.warning(f"Tenant middleware processing time: {process_time}ms")
+            try:
+                await current_connection.execute_script(f'SET search_path TO {default_search_path}')
+            except Exception as e:
+                logger.error(f"Error resetting search path: {e}")
+            tenant_context.set(None)

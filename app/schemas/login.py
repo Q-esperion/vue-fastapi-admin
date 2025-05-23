@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -11,10 +12,12 @@ class CredentialsSchema(BaseModel):
 class JWTOut(BaseModel):
     access_token: str
     username: str
+    tenant_id: Optional[int] = None
 
 
 class JWTPayload(BaseModel):
     user_id: int
     username: str
     is_superuser: bool
+    tenant_id: Optional[int] = None
     exp: datetime

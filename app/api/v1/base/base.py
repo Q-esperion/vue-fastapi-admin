@@ -6,6 +6,7 @@ from app.controllers.user import user_controller
 from app.core.ctx import CTX_USER_ID
 from app.core.dependency import DependAuth
 from app.models.admin import Api, Menu, Role, User
+from app.models.tenant import TenantUser
 from app.schemas.base import Fail, Success
 from app.schemas.login import *
 from app.schemas.users import UpdatePassword
@@ -20,6 +21,11 @@ router = APIRouter()
 async def login_access_token(credentials: CredentialsSchema):
     user: User = await user_controller.authenticate(credentials)
     await user_controller.update_last_login(user.id)
+    
+    # 获取用户的租户信息
+    tenant_user = await TenantUser.filter(user_id=user.id).first()
+    tenant_id = tenant_user.tenant_id if tenant_user else None
+    
     access_token_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     expire = datetime.now(timezone.utc) + access_token_expires
 
@@ -29,10 +35,12 @@ async def login_access_token(credentials: CredentialsSchema):
                 user_id=user.id,
                 username=user.username,
                 is_superuser=user.is_superuser,
+                tenant_id=tenant_id,
                 exp=expire,
             )
         ),
         username=user.username,
+        tenant_id=tenant_id,
     )
     return Success(data=data.model_dump())
 

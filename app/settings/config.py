@@ -2,93 +2,54 @@ import os
 import typing
 
 from pydantic_settings import BaseSettings
-
+from dotenv import load_dotenv
+load_dotenv()
 
 class Settings(BaseSettings):
-    VERSION: str = "0.1.0"
-    APP_TITLE: str = "Vue FastAPI Admin"
-    PROJECT_NAME: str = "Vue FastAPI Admin"
-    APP_DESCRIPTION: str = "Description"
+    VERSION: str = os.getenv("VERSION", "0.1.0")
+    APP_TITLE: str = os.getenv("APP_TITLE", "Vue FastAPI Admin")
+    PROJECT_NAME: str = os.getenv("PROJECT_NAME", "Vue FastAPI Admin")
+    APP_DESCRIPTION: str = os.getenv("APP_DESCRIPTION", "Description")
 
-    CORS_ORIGINS: typing.List = ["*"]
-    CORS_ALLOW_CREDENTIALS: bool = True
-    CORS_ALLOW_METHODS: typing.List = ["*"]
-    CORS_ALLOW_HEADERS: typing.List = ["*"]
+    CORS_ORIGINS: typing.List = eval(os.getenv("CORS_ORIGINS", '["*"]'))
+    CORS_ALLOW_CREDENTIALS: bool = os.getenv("CORS_ALLOW_CREDENTIALS", "true").lower() == "true"
+    CORS_ALLOW_METHODS: typing.List = eval(os.getenv("CORS_ALLOW_METHODS", '["*"]'))
+    CORS_ALLOW_HEADERS: typing.List = eval(os.getenv("CORS_ALLOW_HEADERS", '["*"]'))
 
-    DEBUG: bool = True
+    DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
 
     PROJECT_ROOT: str = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
     BASE_DIR: str = os.path.abspath(os.path.join(PROJECT_ROOT, os.pardir))
     LOGS_ROOT: str = os.path.join(BASE_DIR, "app/logs")
-    SECRET_KEY: str = "3488a63e1765035d386f05409663f55c83bfae3b3c61a932744b20ad14244dcf"  # openssl rand -hex 32
-    JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 day
+    
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "3488a63e1765035d386f05409663f55c83bfae3b3c61a932744b20ad14244dcf")
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))
+
     TORTOISE_ORM: dict = {
         "connections": {
-            # SQLite configuration
-            # "sqlite": {
-            #     "engine": "tortoise.backends.sqlite",
-            #     "credentials": {"file_path": f"{BASE_DIR}/db.sqlite3"},  # Path to SQLite database file
-            # },
-            # MySQL/MariaDB configuration
-            # Install with: tortoise-orm[asyncmy]
-            # "mysql": {
-            #     "engine": "tortoise.backends.mysql",
-            #     "credentials": {
-            #         "host": "localhost",  # Database host address
-            #         "port": 3306,  # Database port
-            #         "user": "yourusername",  # Database username
-            #         "password": "yourpassword",  # Database password
-            #         "database": "yourdatabase",  # Database name
-            #     },
-            # },
-            # PostgreSQL configuration
-            # Install with: tortoise-orm[asyncpg]
-            "postgres": {
-                "engine": "tortoise.backends.asyncpg",
+            os.getenv("DB_ENGINE", "postgres"): {
+                "engine": f"tortoise.backends.{os.getenv('DB_ENGINE', 'asyncpg')}",
                 "credentials": {
-                    "host": "localhost",  # Database host address
-                    "port": 5432,  # Database port
-                    "user": "admin",  # Database username
-                    "password": "123456",  # Database password
-                    "database": "school_db_test",  # Database name
+                    "host": os.getenv("DB_HOST", "localhost"),
+                    "port": int(os.getenv("DB_PORT", "5432")),
+                    "user": os.getenv("DB_USER", "admin"),
+                    "password": os.getenv("DB_PASSWORD", "123456"),
+                    "database": os.getenv("DB_NAME", "school_db_test"),
                 },
             },
-            # MSSQL/Oracle configuration
-            # Install with: tortoise-orm[asyncodbc]
-            # "oracle": {
-            #     "engine": "tortoise.backends.asyncodbc",
-            #     "credentials": {
-            #         "host": "localhost",  # Database host address
-            #         "port": 1433,  # Database port
-            #         "user": "yourusername",  # Database username
-            #         "password": "yourpassword",  # Database password
-            #         "database": "yourdatabase",  # Database name
-            #     },
-            # },
-            # SQLServer configuration
-            # Install with: tortoise-orm[asyncodbc]
-            # "sqlserver": {
-            #     "engine": "tortoise.backends.asyncodbc",
-            #     "credentials": {
-            #         "host": "localhost",  # Database host address
-            #         "port": 1433,  # Database port
-            #         "user": "yourusername",  # Database username
-            #         "password": "yourpassword",  # Database password
-            #         "database": "yourdatabase",  # Database name
-            #     },
-            # },
         },
         "apps": {
             "models": {
                 "models": ["app.models", "aerich.models"],
-                "default_connection": "postgres",
+                "default_connection": os.getenv("DB_ENGINE", "postgres"),
             },
         },
-        "use_tz": False,  # Whether to use timezone-aware datetimes
-        "timezone": "Asia/Shanghai",  # Timezone setting
+        "use_tz": os.getenv("USE_TZ", "false").lower() == "true",
+        "timezone": os.getenv("TIMEZONE", "Asia/Shanghai"),
     }
-    DATETIME_FORMAT: str = "%Y-%m-%d %H:%M:%S"
+    
+    DATETIME_FORMAT: str = os.getenv("DATETIME_FORMAT", "%Y-%m-%d %H:%M:%S")
 
 
 settings = Settings()

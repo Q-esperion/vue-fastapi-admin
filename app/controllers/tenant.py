@@ -4,7 +4,8 @@ from tortoise import Tortoise
 from tortoise.expressions import Q
 
 from app.core.crud import CRUDBase, ModelType, UpdateSchemaType
-from app.models.admin import Tenant, User
+from app.models.tenant import Tenant
+from app.models.admin import User
 from app.schemas.tenants import TenantCreate, TenantUpdate
 from app.settings.config import settings # 导入 settings
 
